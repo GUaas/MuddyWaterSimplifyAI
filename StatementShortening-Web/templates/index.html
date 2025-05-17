@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuddyWaterAI - 文本简化模型</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#121212',
+                        light: '#e5e7eb',
+                        primary: '#3b82f6',
+                        accent: '#8b5cf6',
+                        secondary: '#1e1e2e',
+                        success: '#22c55e',
+                        warning: '#f59e0b',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: 0 },
+                            '100%': { opacity: 1 },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: 0 },
+                            '100%': { transform: 'translateY(0)', opacity: 1 },
+                        },
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-gradient {
+                background-clip: text;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+
+            .bg-glass {
+                background: rgba(40, 40, 60, 0.6);
+                backdrop-filter: blur(10px);
+            }
+
+            .segment-text {
+                display: inline-flex;
+                align-items: center;
+                margin: 0.125rem;
+                padding: 0.125rem 0.375rem;
+                border-radius: 0.25rem;
+                font-size: 0.875rem;
+                line-height: 1.25rem;
+                transition: all 0.2s ease;
+                cursor: default;
+                user-select: none;
+                backdrop-filter: blur(2px);
+            }
+
+            .segment-text:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+                background-color: rgba(245, 245, 245, 0.9);
+            }
+
+            .segment-text:active {
+                transform: translateY(0);
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+
+            /* 可选的不同状态样式 */
+            .segment-text.primary {
+                background-color: rgba(37, 99, 235, 0.1);
+                color: #1d4ed8;
+            }
+
+            .segment-text.success {
+                background-color: rgba(16, 185, 129, 0.1);
+                color: #059669;
+            }
+
+            .segment-text.warning {
+                background-color: rgba(245, 158, 11, 0.1);
+                color: #d97706;
+            }
+
+            .segment-text.danger {
+                background-color: rgba(239, 68, 68, 0.1);
+                color: #dc2626;
+            }
+
+            input[type="range"]::-webkit-slider-thumb,
+            input[type="range"]::-moz-range-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: #2563eb;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            input[type="range"]::-webkit-slider-thumb:hover,
+            input[type="range"]::-moz-range-thumb:hover {
+                transform: scale(1.1);
+                background: #4f46e5;
+            }
+
+            input[type="range"]:active::-webkit-slider-thumb,
+            input[type="range"]:active::-moz-range-thumb {
+                background: #6d28d9;
+                box-shadow: 0 0 12px rgba(109, 40, 217, 0.2);
+            }
+
+            .text-gradient-flow {
+                background-size: 200% 200%;
+                animation: gradient-flow 6s ease infinite;
+            }
+
+            .enhanced-input {
+                @apply w-full bg-dark/20 border-2 border-white/10 rounded-lg p-3 text-sm focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all duration-300 placeholder-white/30;
+            }
+
+            .hover\:shadow-3d:hover {
+                box-shadow: 0 8px 24px -4px rgba(59, 130, 246, 0.3),
+                    0 4px 12px -2px rgba(139, 92, 246, 0.2);
+            }
+
+            .divider {
+                @apply relative h-px bg-white/10 my-6;
+            }
+
+            .divider::after {
+                @apply absolute -top-[5px] left-1/2 -translate-x-1/2 w-3 h-3 bg-accent/60 blur-[8px] rounded-full;
+                content: '';
+            }
+
+            .card-hover {
+                @apply transform transition-all duration-300 hover:-translate-y-1;
+            }
+
+            .loading-spinner {
+                @apply animate-spin rounded-full border-4 border-t-transparent border-primary/30 border-t-primary;
+            }
+
+            .no-scrollbar {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+
+            .no-scrollbar::-webkit-scrollbar {
+                display: none;
+            }
+
+            .enhanced-input {
+                @apply overflow-auto;
+            }
+
+            .enhanced-input::-webkit-scrollbar {
+                @apply hidden;
+            }
+
+            .split-preview-container {
+                @apply overflow-y-auto no-scrollbar border border-white/10 rounded-lg transition-all duration-300;
+                background: rgba(30, 30, 46, 0.6);
+                max-height: 3rem;
+            }
+
+            .split-preview-container.has-content {
+                max-height: 8rem;
+            }
+
+            .empty-preview::before {
+                @apply text-white/30 italic text-sm;
+            }
+        }
+    </style>
+</head>
+
+<body class="font-inter bg-dark text-light min-h-screen p-4 md:p-8">
+    <!-- 主容器 -->
+    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+        <!-- 左侧品牌区域 -->
+        <aside class="lg:col-span-3 flex flex-col justify-between h-[calc(100vh-4rem)] lg:h-auto sticky top-8">
+            <div class="bg-glass rounded-xl p-6 lg:p-8 border border-white/10 shadow-xl transition-all duration-300 hover:shadow-2xl animate-fade-in">
+                <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-extrabold text-gradient bg-gradient-to-r from-primary to-accent tracking-tight mb-4">MuddyWaterAI</h1>
+                <p class="text-primary uppercase tracking-widest text-sm md:text-base mb-6">文本简化AI | 对组字词优化</p>
+
+<div class="space-y-4">
+    <!-- 新增的文本简化模块（优化后） -->
+    <div class="flex items-center gap-3 text-sm">
+        <div class="w-8 h-8 rounded-full bg-purple-200/20 flex items-center justify-center text-purple-600">
+            <i class="fa-solid fa-font text-lg"></i> <!-- 更大一号的文本图标，更突出 -->
+        </div>
+        <div>
+            <h3 class="font-medium">文本简化</h3>
+            <p class="text-white/70 text-xs leading-3">AI文本简化算法</p> <!-- 优化文案，更简洁专业 -->
+        </div>
+    </div>
+
+    <!-- 原有的智能分段模块 -->
+    <div class="flex items-center gap-3 text-sm">
+        <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+            <i class="fa-solid fa-code"></i>
+        </div>
+        <div>
+            <h3 class="font-medium">智能分段</h3>
+            <p class="text-white/60 text-xs">文本智能分段算法</p>
+        </div>
+    </div>
+
+    <!-- 原有的高效处理模块 -->
+    <div class="flex items-center gap-3 text-sm">
+        <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent">
+            <i class="fa-solid fa-bolt"></i>
+        </div>
+        <div>
+            <h3 class="font-medium">高效处理</h3>
+            <p class="text-white/60 text-xs">快速处理大段文本内容</p>
+        </div>
+    </div>
+
+    <!-- 原有的隐私保护模块 -->
+    <div class="flex items-center gap-3 text-sm">
+        <div class="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center text-success">
+            <i class="fa-solid fa-shield"></i>
+        </div>
+        <div>
+            <h3 class="font-medium">隐私保护</h3>
+            <p class="text-white/60 text-xs">本地处理不传输您的内容</p>
+        </div>
+    </div>
+</div>
+
+                <div class="divider my-8"></div>
+
+                <div class="text-sm text-white/60">
+                    <p class="mb-3">MuddyWaterAI 文本简化套件依托前沿自然语言处理技术，助力高效处理多类型文本任务。</p>
+                    <p>版本: v1.0.0</p>
+                </div>
+            </div>
+
+            <div class="hidden lg:block bg-dark/20 rounded-xl p-4 border border-white/10 text-xs text-white/40 mt-4">
+                <p>© 2025 MuddyWaterAI. 保留所有权利。</p>
+            </div>
+        </aside>
+
+        <!-- 右侧内容区域 -->
+        <div class="lg:col-span-9 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            <!-- 控制面板 -->
+            <section class="bg-glass rounded-xl p-6 lg:p-8 border border-white/10 shadow-xl transition-all duration-300 hover:shadow-2xl animate-slide-up">
+                <form id="processForm" class="space-y-6">
+                    <!-- 文本输入区域 -->
+                    <div class="space-y-2">
+                        <label for="input_text" class="block text-primary font-medium">📝 输入文本</label>
+                        <textarea
+                            id="input_text"
+                            name="input_text"
+                            rows="5"
+                            class="enhanced-input no-scrollbar"
+                            placeholder="请输入需要处理的文本..."
+                        ></textarea>
+
+                        <!-- 可视化分割显示 -->
+                        <div
+                            id="splitPreview"
+                            class="split-preview-container p-4 font-mono empty-preview"
+                            data-empty="true"
+                        ></div>
+                    </div>
+
+                    <!-- 参数设置区域 -->
+                    <div class="space-y-6">
+                        <label class="block text-primary font-medium">📏 分段参数设置</label>
+
+                        <!-- 最大长度滑动条 -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <label for="max_seq_len" class="text-sm opacity-80">最大长度</label>
+                                <span id="maxSeqLenValue" class="text-primary font-medium">122</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="max_seq_len"
+                                name="max_seq_len"
+                                min="10"
+                                max="122"
+                                step="1"
+                                value="122"
+                                class="w-full h-2 bg-secondary/30 rounded-full"
+                            >
+                            <div class="flex justify-between text-xs text-white/50">
+                                <span>10</span>
+                                <span>122</span>
+                            </div>
+                        </div>
+
+                        <!-- 智能限制滑动条 -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <label for="hard_max_len" class="text-sm opacity-80">智能限制</label>
+                                <span id="hardMaxLenValue" class="text-accent font-medium">50</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="hard_max_len"
+                                name="hard_max_len"
+                                min="1"
+                                max="100"
+                                step="1"
+                                value="50"
+                                class="w-full h-2 bg-secondary/30 rounded-full"
+                            >
+                            <div class="flex justify-between text-xs text-white/50">
+                                <span>1</span>
+                                <span>100</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 提交按钮 -->
+                    <button
+                        type="submit"
+                        id="submitBtn"
+                        class="w-full py-3 px-4 bg-gradient-to-r from-primary to-accent rounded-lg text-white font-semibold flex items-center justify-center gap-2 hover:shadow-3d transition-all duration-300"
+                    >
+                        <i class="fa-solid fa-play animate-float"></i>
+                        <span>立即处理</span>
+                    </button>
+                </form>
+            </section>
+
+            <!-- 结果面板 -->
+            <section class="bg-secondary rounded-xl p-6 lg:p-8 shadow-xl sticky top-8 self-start transition-all duration-300 hover:shadow-2xl animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-accent border-b-2 border-primary pb-2">处理结果</h2>
+                    <button
+                        id="copyBtn"
+                        class="text-primary hover:text-accent transition-colors duration-300 opacity-0 pointer-events-none"
+                        title="复制结果"
+                    >
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+
+                <div id="resultContainer" class="hidden space-y-6">
+                    <div class="bg-dark/30 rounded-lg p-4">
+                        <h3 class="text-primary text-sm font-medium mb-2">原始文本:</h3>
+                        <p id="inputTextDisplay" class="opacity-80 text-sm md:text-base break-words"></p>
+                    </div>
+
+                    <div class="bg-dark/30 rounded-lg p-4">
+                        <h3 class="text-primary text-sm font-medium mb-2">推理结果:</h3>
+                        <div id="resultText" class="text-accent break-words whitespace-pre-wrap"></div>
+                    </div>
+
+                    <div class="bg-dark/30 rounded-lg p-4">
+                        <h3 class="text-primary text-sm font-medium mb-2">对组优化:</h3>
+                        <div id="optimizedResultText" class="text-accent break-words whitespace-pre-wrap"></div>
+                    </div>
+                </div>
+
+                <div id="loadingContainer" class="hidden space-y-4 text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary/30 border-t-primary"></div>
+                    <p class="text-primary animate-pulse-slow">正在处理您的文本...</p>
+                </div>
+
+                <div id="errorContainer" class="hidden bg-red-500/10 border-l-4 border-red-500 text-red-400 p-4 rounded-r-lg">
+                    <p id="errorMessage"></p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 移动端底部版权信息 -->
+    <footer class="lg:hidden mt-8 bg-dark/20 rounded-xl p-4 border border-white/10 text-xs text-white/40 text-center">
+        <p>© 2025 MuddyWaterAI. 保留所有权利。</p>
+    </footer>
+    <script>
+        // 智能分割算法实现
+        function splitTextV3(text, maxSeqLen = 122, hardMaxLen = 50) {
+            // 第一阶段：基础分割
+            let segments = [];
+            let current = [];
+            let currentLen = 0;
+
+            for (let char of text) {
+                if ([...'、'].includes(char)) {
+                    current.push(char);
+                    currentLen++;
+                    continue;
+                }
+
+                if ([...'。！？；∶!?;'].includes(char)) {
+                    current.push(char);
+                    segments.push(current.join(''));
+                    current = [];
+                    currentLen = 0;
+                    continue;
+                }
+
+                if (currentLen >= maxSeqLen) {
+                    let splitPos = null;
+                    // 逆向查找优先分割字符
+                    for (let j = Math.min(current.length - 1, 20); j >= 0; j--) {
+                        if ([...'。！？；∶!?;，,'].includes(current[j])) {
+                            splitPos = j + 1;
+                            break;
+                        }
+                    }
+                    if (splitPos === null) splitPos = Math.min(current.length, maxSeqLen);
+
+                    segments.push(current.slice(0, splitPos).join(''));
+                    current = current.slice(splitPos);
+                    currentLen = current.length;
+                }
+
+                current.push(char);
+                currentLen++;
+            }
+            if (current.length > 0) segments.push(current.join(''));
+
+            // 第二阶段：合并短片段
+            let merged = [];
+            let buffer = [];
+            let bufferLen = 0;
+
+            for (let seg of segments) {
+                if (bufferLen + seg.length <= maxSeqLen) {
+                    buffer.push(seg);
+                    bufferLen += seg.length;
+                } else {
+                    merged.push(buffer.join(''));
+                    buffer = [seg];
+                    bufferLen = seg.length;
+                }
+            }
+            if (buffer.length > 0) merged.push(buffer.join(''));
+
+            // 第三阶段：强制长度限制
+            let finalSegments = [];
+            for (let seg of merged) {
+                while (seg.length > hardMaxLen) {
+                    let splitPos = null;
+                    for (let i = Math.min(hardMaxLen, seg.length - 1); i > hardMaxLen - 20; i--) {
+                        if ([...'。！？；∶!?;，,'].includes(seg[i])) {
+                            splitPos = i + 1;
+                            break;
+                        }
+                    }
+                    if (splitPos === null) splitPos = hardMaxLen;
+                    finalSegments.push(seg.substring(0, splitPos));
+                    seg = seg.substring(splitPos);
+                }
+                finalSegments.push(seg);
+            }
+
+            return finalSegments;
+        }
+
+        // 在原有的JavaScript代码中添加以下逻辑
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputText = document.getElementById('input_text');
+            const splitPreview = document.getElementById('splitPreview');
+
+            // 输入事件监听
+            inputText.addEventListener('input', function (e) {
+                const hasContent = e.target.value.trim().length > 0;
+
+                // 更新容器状态
+                splitPreview.dataset.empty = !hasContent;
+                splitPreview.classList.toggle('has-content', hasContent);
+            });
+
+            // 点击空白提示聚焦输入框
+            splitPreview.addEventListener('click', () => {
+                if (splitPreview.dataset.empty === 'true') {
+                    inputText.focus();
+                }
+            });
+        });
+
+        // 现代化配色方案
+        const colorPalette = [
+            { bg: 'bg-blue-50', text: 'text-blue-600' },
+            { bg: 'bg-purple-50', text: 'text-purple-600' },
+            { bg: 'bg-green-50', text: 'text-green-600' },
+            { bg: 'bg-orange-50', text: 'text-orange-600' },
+        ];
+
+        function getColor(index) {
+            return colorPalette[index % colorPalette.length];
+        }
+
+        // 实时预览更新
+        function updatePreview() {
+            const text = input.value;
+            const maxLen = parseInt(maxLenInput.value);
+            const hardMax = parseInt(hardMaxInput.value);
+
+            // 更新参数显示
+            document.getElementById('maxSeqLenValue').textContent = maxLen;
+            document.getElementById('hardMaxLenValue').textContent = hardMax;
+
+            const segments = splitTextV3(text, maxLen, hardMax);
+            const previewHTML = segments.map((seg, i) => `
+                <span class="segment-text ${getColor(i).bg} ${getColor(i).text}">
+                    ${seg}
+                    <sup class="opacity-60 text-xs">${seg.length}</sup>
+                </span>
+            `).join(' ');
+
+            splitPreview.innerHTML = previewHTML;
+        }
+
+        // DOM元素引用
+        const input = document.getElementById('input_text');
+        const maxLenInput = document.getElementById('max_seq_len');
+        const hardMaxInput = document.getElementById('hard_max_len');
+        const splitPreview = document.getElementById('splitPreview');
+
+        // 初始化参数显示
+        updatePreview();
+
+        // 事件监听
+        [input, maxLenInput, hardMaxInput].forEach(el => {
+            el.addEventListener('input', updatePreview);
+        });
+
+        // 表单提交处理
+document.getElementById('processForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const submitBtn = document.getElementById('submitBtn');
+    const loading = document.getElementById('loadingContainer');
+    const result = document.getElementById('resultContainer');
+    const error = document.getElementById('errorContainer');
+
+    submitBtn.disabled = true;
+    result.classList.add('hidden');
+    error.classList.add('hidden');
+    loading.classList.remove('hidden');
+
+    try {
+        // 获取表单数据
+        const formData = new FormData(e.target);
+        const inputText = formData.get('input_text');
+        const maxSeqLen = formData.get('max_seq_len');
+        const hardMaxLen = formData.get('hard_max_len');
+
+        // 发送API请求
+        const response = await fetch('/process', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                input_text: inputText,
+                max_seq_len: maxSeqLen,
+                hard_max_len: hardMaxLen,
+            }),
+        });
+
+        const data = await response.json();
+
+        // 检查业务逻辑是否成功
+        if (!data.show_result) {
+            throw new Error(data.error || '处理失败，请重试');
+        }
+
+        if (!response.ok) throw new Error('请求失败，请检查网络或重试');
+
+        // 渲染结果
+        document.getElementById('inputTextDisplay').textContent = data.input_text;
+        document.getElementById('resultText').textContent = data.result || '';
+        document.getElementById('optimizedResultText').textContent = data.optimized_result || '';
+        result.classList.remove('hidden');
+        document.getElementById('copyBtn').classList.remove('opacity-0', 'pointer-events-none');
+
+    } catch (err) {
+        document.getElementById('errorMessage').textContent = `❌ ${err.message}`;
+        error.classList.remove('hidden');
+    } finally {
+        submitBtn.disabled = false;
+        loading.classList.add('hidden');
+    }
+});
+    </script>
+</body>
+
+</html>
